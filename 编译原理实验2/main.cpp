@@ -14,6 +14,9 @@ int main()
             e.toSuffix();
             e.toNFA();
             e.ShowNFA();
+            e.toDFA();
+            cout << endl;
+            e.ShowDFA();
             e.Reset();
         }
     }

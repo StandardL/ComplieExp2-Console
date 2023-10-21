@@ -8,7 +8,9 @@ XLex::XLex()
     expression = "";
 
     o_priority = { {'(', 1}, {'|', 2}, {'^', 3}, {'*', 4}, {'?', 4} };
-
+    state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        state_chart[i].resize(110);
 }
 
 bool XLex::Read(std::string input)
@@ -41,7 +43,67 @@ void XLex::Reset()
 
 bool XLex::toDFA()
 {
-    return false;
+    queue<set<int>> q;
+    map<set<int>, int> state_set;  // Key-状态集合, Value-DFA节点编号
+    
+    set<int> si; si.clear();
+    si.emplace(nfa_start_node);  // 放入初始节点
+    e_closure(nfa_start_node, si);  // 求其e-闭包
+    int DFA_nodenum = 0;  // DFA节点编号
+    DFA.insertVertix();  // DFA图中插入初始节点
+    state_set.emplace(si, DFA_nodenum);
+    DFA_nodenum++;  //放进去后记得自增节点编号
+    state_chart[state_set[si]][0] = si;  // 状态表的第一列存放状态集合
+    q.push(si);  // 待处理的节点队列
+
+    while (!q.empty())
+    {
+        auto sc = q.front(); q.pop();
+        state_chart[state_set[sc]][0] = sc;
+        int state_index = 1;
+        for (auto& c : chars)  // 构建列索引
+        {
+            col_value[c] = state_index;
+            set<int> next_state;  // 记录经过字符"c"时能到达的节点编号
+
+            for (auto& itc : sc)
+            {
+                getNeighbor(itc, c, next_state);
+            }
+            if (next_state.empty())  // 当前经过字符"c"时，没有可达节点状态
+            {
+                state_chart[state_set[sc]][state_index] = next_state;
+                state_index++;
+                continue;
+            }
+            for (auto& nitc : next_state)  // 若有，对其求取e-闭包
+            {
+                e_closure(nitc, next_state);
+            }
+            state_chart[state_set[sc]][state_index] = next_state;
+            state_index++;
+
+            if (sc == next_state)  // 独立处理闭包情况，避免死循环
+            {
+                DFA.insertEdge(state_set[sc], state_set[sc], c);
+                continue;
+            }
+            if (state_set.count(next_state) == 0)  // 没有存过新的可达节点集合时要先存一下
+            {
+                state_set[next_state] = DFA_nodenum;
+                DFA_nodenum++;
+                DFA.insertVertix();
+                DFA.insertEdge(state_set[sc], state_set[next_state], c);
+                q.push(next_state);
+            }
+            else  // 否则直接将这两个集合连起来，表示状态集合A经过字符"c"变换可以得到状态集合B.
+            {
+                DFA.insertEdge(state_set[sc], state_set[next_state], c);
+            }
+        }
+    }
+
+    return true;
 }
 
 bool XLex::toNFA()
@@ -188,7 +250,7 @@ void XLex::Selectable()  // a?
     st.emplace(e);
 }
 
-void XLex::getNeighbor(int v, char c, set<int>& ni)
+void XLex::getNeighbor(int v, char c, set<int>& ni)  // 获取经过c之后的可达状态
 {
     auto target = NFA.G[v];
     for (auto& e : target)
@@ -201,6 +263,14 @@ void XLex::getNeighbor(int v, char c, set<int>& ni)
 void XLex::e_closure(int v, set<int>& ei)
 {
     auto target = NFA.G[v];
+    for (auto& e : target)
+    {
+        if (e.character == 'e')
+        {
+            ei.insert(e.end);
+            e_closure(e.end, ei);
+        }
+    }
 }
 
 void XLex::toSuffix()
@@ -262,7 +332,6 @@ void XLex::toSuffix()
 
 void XLex::ShowNFA()
 {
-    string res;
     cout << "-----------------NFA---------------------\n";
     for (int i = 0; i < NFA.NumofVertixes(); i++)
     {
@@ -278,6 +347,36 @@ void XLex::ShowNFA()
 
 void XLex::ShowDFA()
 {
+    cout << "-----------------DFA---------------------\n";
+    // 输出首行标题
+    for (int i = 0; i < DFA.NumofVertixes(); i++)
+    {
+        for (auto& e : DFA.G[i])
+        {
+            cout << "From: " << i << "\tTo: " << e.end << "\tChar: " << e.character << endl;
+        }
+    }
+    cout << "-----------------DFA---------------------\n";
+    cout << endl;
+    cout << "--------------State Chart----------------\n";
+    for (int i = 0; i < DFA.NumofVertixes(); i++)
+    {
+        for (auto& e : state_chart[i][0])
+        {
+            cout << e << ",";
+        }
+        cout << "\t\t";
+        for (int j = 1; j < state_chart[i].size(); j++)
+        {
+            for (auto& e : state_chart[i][j])
+            {
+                cout << e << ",";
+            }
+            cout << "\t\t";
+        }
+        cout << endl;
+    }
+    cout << "--------------State Chart----------------\n";
 }
 
 bool XLex::isOperator(char c)
