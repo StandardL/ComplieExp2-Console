@@ -263,7 +263,7 @@ void XLex::toSuffix()
 void XLex::ShowNFA()
 {
     string res;
-    cout << "-------------------------------------------\n";
+    cout << "-----------------NFA---------------------\n";
     for (int i = 0; i < NFA.NumofVertixes(); i++)
     {
         for (auto& e : NFA.G[i])
@@ -273,7 +273,7 @@ void XLex::ShowNFA()
     }
     cout << "Start node is " << nfa_start_node << endl;
     cout << "End node is " << nfa_end_node << endl;
-    cout << "-------------------------------------------\n";
+    cout << "-----------------NFA---------------------\n";
 }
 
 void XLex::ShowDFA()
