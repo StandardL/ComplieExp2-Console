@@ -36,9 +36,12 @@ void XLex::Reset()
     suffix.clear();
     NFA.Reset();
     DFA.Reset();
+    minDFA.Reset();
     chars.clear();
     while (!st.empty())
         st.pop();
+    state_chart.clear();
+    col_value.clear();
 }
 
 bool XLex::toDFA()
@@ -133,6 +136,113 @@ bool XLex::toNFA()
     st.emplace(e);
     nfa_start_node = s;
     nfa_end_node = e;
+    return true;
+}
+
+bool XLex::toMinDFA()
+{
+    vector<int> S1, S2;  // DFA节点集合，S1终态集合，S2非终态集合
+    for (int i = 0; i < DFA.NumofVertixes(); i++)
+    {
+        if (state_chart[i][0].count(nfa_end_node) != 0)
+            S1.emplace_back(i);
+        else
+			S2.emplace_back(i);
+	}
+
+    queue<vector<int>> q;  // 待处理的节点队列
+    q.push(S1); q.push(S2);
+    
+    map<int, vector<int>> mp_temp;  // 临时存放当前划分的节点集合与DFA状态转换表的映射
+    int minDFA_nodenum_temp = 0;  // 当前划分的最小化DFA节点数
+    mp_temp.emplace(minDFA_nodenum_temp++, S1);
+    mp_temp.emplace(minDFA_nodenum_temp++, S2);
+
+    map<int, vector<int>> mp;  // miniDFA->DFA的映射
+    int minDFA_nodenum = 0;  // 最小化DFA节点数
+
+    int processing = -1;  // 当前处理的集合编号
+
+    while (!q.empty())  // 获取映射表
+    {
+        auto s = q.front(); q.pop();
+        processing++;
+
+        if (s.empty())
+            continue;
+        int size = s.size();
+        if (size == 1)  // 只有一个节点，直接放入最小化DFA中
+        {
+			mp[minDFA_nodenum] = s;
+			minDFA_nodenum++;
+			continue;
+		}
+        // 需要划分的子集合
+        vector<vector<int>> sub_set;
+
+        int node = s[0];
+        bool is_same = true;  // 检查当前集合是否和目前已有的集合相同
+        for (int i = 1; i < size; i++)
+        {
+            // 如果当前节点的转换表是否和已有的节点转换表不一致，说明需要继续划分
+            if (!is_equal(node, s[i], mp_temp))
+            {
+				is_same = false;
+                int cur_node = s[i];
+                vector<int> cur_set;
+                for (auto& it : s)
+                {
+                    // 在划分子集过程中确保是相同集合的元素被放在一起
+                    if (is_equal(it, cur_node, mp_temp))
+                    {
+                        cur_set.emplace_back(it);
+                        s.erase(find(s.begin(), s.end(), it));
+                    }
+                }
+                sub_set.emplace_back(cur_set);
+                size = s.size();
+			}
+        }
+        if (is_same)  // 如果相同，直接放入最小化DFA中
+        {
+            mp[minDFA_nodenum++] = s;
+        }
+        else // 否则，把划分剩余的子集s加入到待处理队列
+        {
+            sub_set.emplace_back(s);
+            for (auto& it : sub_set)
+            {
+				q.push(it);
+                mp_temp[minDFA_nodenum_temp++] = it;
+            }
+            vector<int> temp;
+            mp_temp[processing] = temp;
+        }
+    }
+
+    // 生成minDFA
+    for (int i = 0; i < mp.size(); i++)  // 插入节点
+        minDFA.insertVertix();
+    for (auto& i : mp)  // 插入边
+    {
+        for (auto& j : i.second)
+        {
+            auto edges = DFA.G[j];
+            for (auto& e : edges)  // 找DFA节点中的每个边
+            {
+				// 找min_dfa节点对应的dfa节点集中的节点
+                for (int k = 0; k < mp.size(); k++)
+                {
+                    if (find(mp[k].begin(), mp[k].end(), e.end) != mp[k].end())
+                    {
+						minDFA.insertEdge(i.first, k, e.character);
+						break;
+					}
+				}
+			}
+        }
+    }
+
     return true;
 }
 
@@ -273,6 +383,41 @@ void XLex::e_closure(int v, set<int>& ei)
     }
 }
 
+int XLex::dfa_transform(int v, char c, map<int, vector<int>> mp)
+{
+    int node = -114514;
+    for (auto& e : DFA.G[v])  // 回到DFA图中找这个编号的节点是否有c这条边
+    {
+        if (e.character == c)
+        {
+			node = e.end;
+			break;
+		}
+	}
+    if (node == -114514) // 找不到就附一个他本身的值
+        node = v;
+    int target;
+    for (auto& i : mp)  // 在映射表中找到这个节点的映射值编号
+    {
+        for (auto& j : i.second)
+        {
+            if (j == node)
+                target = i.first;
+        }
+    }
+    return target;
+}
+
+bool XLex::is_equal(int v1, int v2, map<int, vector<int>> mp)
+{
+    for (auto& c : chars)
+    {
+        if (dfa_transform(v1, c, mp) != dfa_transform(v2, c, mp))
+			return false;
+    }
+    return true;
+}
+
 void XLex::toSuffix()
 {
     // 转成后缀表达式之前先对符号进行预处理
@@ -377,6 +522,21 @@ void XLex::ShowDFA()
         cout << endl;
     }
     cout << "--------------State Chart----------------\n";
+}
+
+void XLex::ShowMinDFA()
+{
+    cout << "-----------------MinDFA---------------------\n";
+    for (int i = 0; i < minDFA.NumofVertixes(); i++)
+    {
+        for (auto& e : minDFA.G[i])
+        {
+			cout << "From: " << i << "\tTo: " << e.end << "\tChar: " << e.character << endl;
+		}
+	}
+    cout << "Start node is 0" << endl;
+    
+	cout << "-----------------MinDFA---------------------\n";
 }
 
 bool XLex::isOperator(char c)

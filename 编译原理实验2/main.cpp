@@ -17,6 +17,9 @@ int main()
             e.toDFA();
             cout << endl;
             e.ShowDFA();
+            cout << endl;
+            e.toMinDFA();
+            e.ShowMinDFA();
             e.Reset();
         }
     }
