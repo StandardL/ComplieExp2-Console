@@ -4,11 +4,14 @@
 #include <stack>
 #include <queue>
 #include <iostream>
+#include <fstream>
 #include "Graph.h"
 class XLex
 {
 public:
 	XLex();
+
+	std::vector<std::string> code;  // 存放C++代码
 
 	bool Read(std::string input);  // 读取表达式
 	bool Check();  // 检查表达式是否合法
@@ -20,6 +23,7 @@ public:
 	void ShowNFA();  // 显示NFA
 	void ShowDFA();  // 显示DFA
 	void ShowMinDFA();  // 显示最小化DFA
+	void ShowCode(std::string filename);  // 显示C++代码
 
 private:
 	Graph NFA;
@@ -29,14 +33,17 @@ private:
 
 	int nfa_start_node;  // NFA开始的结点编号
 	int nfa_end_node;  // NFA结束的结点编号
+	int mindfa_start_node;  // 最小化DFA开始的结点编号
 
 	std::string expression;  // 表达式
 	std::string suffix;  // 后缀表达式
 	std::map<char, int> o_priority;  // 运算符的优先级
 	std::stack<int> st;  // 存放节点编号的栈
 	std::set<char> chars;  // 字符节点
-	std::vector<std::vector<std::set<int>>> state_chart;  // 存放状态表的vector
+	std::vector<std::vector<std::set<int>>> state_chart;  // DFA存放状态表的vector
 	std::map<char, int> col_value;  // 状态转换表的列索引，e.g. a->1.
+	std::vector<std::vector<std::set<int>>> min_state_chart;  // 最小化DFA存放状态表的vector
+	bool isAccepted[110];  // 是否是接受状态
 
 
 	bool isOperator(char c);  // 判断是否是运算符
@@ -54,7 +61,9 @@ private:
 	void e_closure(int v, std::set<int>& ei);  // 找出所有epsilon闭包
 
 	// DFA -> MinDFA
-	int dfa_transform(int v, char c, std::map<int, std::vector<int>> mp);
-	bool is_equal(int v1, int v2, std::map<int, std::vector<int>> mp);
+	bool is_equal(int v1, int v2);
+
+	// MinDFA -> C++ Code
+	void toCode(int v, int level);
 };
 
