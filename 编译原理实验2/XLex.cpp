@@ -41,6 +41,9 @@ void XLex::Reset()
     while (!st.empty())
         st.pop();
     state_chart.clear();
+    state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        state_chart[i].resize(110);
     col_value.clear();
 }
 
