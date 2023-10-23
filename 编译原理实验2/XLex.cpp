@@ -37,6 +37,7 @@ void XLex::Reset()
     NFA.Reset();
     DFA.Reset();
     minDFA.Reset();
+    minDFA_t.Reset();
     chars.clear();
     while (!st.empty())
         st.pop();
@@ -119,7 +120,7 @@ bool XLex::toNFA()
         if (isalpha(c) || isdigit(c))
         {
             BuildCell(c);
-            chars.emplace_back(c);
+            chars.emplace(c);
         }
         else
         {
@@ -176,8 +177,7 @@ bool XLex::toMinDFA()
         int size = s.size();
         if (size == 1)  // 只有一个节点，直接放入最小化DFA中
         {
-			mp[minDFA_nodenum] = s;
-			minDFA_nodenum++;
+			mp[minDFA_nodenum++] = s;
 			continue;
 		}
         // 需要划分的子集合
@@ -193,14 +193,16 @@ bool XLex::toMinDFA()
 				is_same = false;
                 int cur_node = s[i];
                 vector<int> cur_set;
-                for (auto& it : s)
+                for (auto it = s.begin()+1; it != s.end();)
                 {
                     // 在划分子集过程中确保是相同集合的元素被放在一起
-                    if (is_equal(it, cur_node, mp_temp))
+                    if (is_equal(*it, cur_node, mp_temp))
                     {
-                        cur_set.emplace_back(it);
-                        s.erase(find(s.begin(), s.end(), it));
+                        cur_set.emplace_back(*it);
+                        s.erase(it);
                     }
+                    else
+                        it++;
                 }
                 sub_set.emplace_back(cur_set);
                 size = s.size();
@@ -215,7 +217,7 @@ bool XLex::toMinDFA()
             sub_set.emplace_back(s);
             for (auto& it : sub_set)
             {
-				q.push(it);
+				q.emplace(it);
                 mp_temp[minDFA_nodenum_temp++] = it;
             }
             vector<int> temp;
@@ -223,28 +225,47 @@ bool XLex::toMinDFA()
         }
     }
 
+    cout << "Test 2:\n";
+    for (auto& i : mp)
+    {
+        cout << i.first << " ";
+        for (auto& j: i.second)
+			cout << j << ",";
+        cout << endl;
+    }
+
     // 生成minDFA
     for (int i = 0; i < mp.size(); i++)  // 插入节点
         minDFA.insertVertix();
-    for (auto& i : mp)  // 插入边
+    for (int i = 0; i < mp.size(); i++)  // 插入边
     {
-        for (auto& j : i.second)
+        for (auto j = 0; j < mp[i].size(); j++)
         {
-            auto edges = DFA.G[j];
+            auto edges = DFA.G[mp[i][j]];
             for (auto& e : edges)  // 找DFA节点中的每个边
             {
 				// 找min_dfa节点对应的dfa节点集中的节点
                 for (int k = 0; k < mp.size(); k++)
                 {
-                    if (find(mp[k].begin(), mp[k].end(), e.end) != mp[k].end())
+                    auto target = find(mp[k].begin(), mp[k].end(), e.end);
+                    if (target != mp[k].end())
                     {
-						minDFA.insertEdge(i.first, k, e.character);
+						bool res = minDFA.insertEdge(i, k, e.character);
+                        cout << "Insert Result: " << res << endl;
 						break;
 					}
 				}
 			}
         }
     }
+    for (int i = minDFA.NumofVertixes() - 1; i >= 0; i--)  // 反向
+    {
+		minDFA_t.insertVertix();
+        for (auto& j : minDFA.G[i])
+        {
+            minDFA_t.insertEdge(abs(i - minDFA.NumofVertixes() + 1), abs(j.end - minDFA.NumofVertixes() + 1), j.character);
+        }
+	}
 
     return true;
 }
@@ -415,7 +436,9 @@ bool XLex::is_equal(int v1, int v2, map<int, vector<int>> mp)
 {
     for (auto& c : chars)
     {
-        if (dfa_transform(v1, c, mp) != dfa_transform(v2, c, mp))
+        /*if (dfa_transform(v1, c, mp) != dfa_transform(v2, c, mp))
+			return false;*/
+        if (state_chart[v1][c].count(nfa_end_node) != state_chart[v2][c].count(nfa_end_node))
 			return false;
     }
     return true;
@@ -530,14 +553,14 @@ void XLex::ShowDFA()
 void XLex::ShowMinDFA()
 {
     cout << "-----------------MinDFA---------------------\n";
-    for (int i = 0; i < minDFA.NumofVertixes(); i++)
+    for (int i = 0; i < minDFA_t.NumofVertixes(); i++)
     {
-        for (auto& e : minDFA.G[i])
+        for (auto& e : minDFA_t.G[i])
         {
 			cout << "From: " << i << "\tTo: " << e.end << "\tChar: " << e.character << endl;
 		}
 	}
-    cout << "Start node is 0" << endl;
+    //cout << "Start node is 0" << endl;
     
 	cout << "-----------------MinDFA---------------------\n";
 }
