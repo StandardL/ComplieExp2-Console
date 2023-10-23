@@ -16,6 +16,13 @@ struct Edge
 		else
 			return false;
 	}
+	bool operator==(const Edge& e2) const
+	{
+		if (this->end == e2.end && this->character == e2.character)
+			return true;
+		else
+			return false;
+	}
 };
 
 class Graph
@@ -33,7 +40,7 @@ public:
 	void DFS(int v, char c);
 	void Reset();
 
-	std::vector<std::set<Edge>> G;
+	std::vector<std::multiset<Edge>> G;
 private:
 	int maxVertixes;
 	int numEdges;

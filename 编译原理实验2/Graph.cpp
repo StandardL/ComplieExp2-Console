@@ -20,12 +20,15 @@ bool Graph::insertVertix()
 
 bool Graph::insertEdge(int v1, int v2, char c)
 {
-	if (v1 > -1 && v1 < numVertixes && v2 > -2 && v2 < numVertixes)
+	if (v1 > -1 && v1 < maxVertixes && v2 > -2 && v2 < maxVertixes)
 	{
 		Edge e2(v2, c);
-		// 确保两点之间的边值不重复
-		if (G[v1].find(e2) != G[v1].end())
-			return false;
+		// 确保两点之间的边值不重复（重复条件：终点相同，字符相同）
+		for (auto& e : G[v1])
+		{
+			if (e.end == e2.end && e.character == e2.character)
+				return false;
+		}
 		// 默认是v1 -> v2
 		G[v1].insert(e2);
 		return true;
