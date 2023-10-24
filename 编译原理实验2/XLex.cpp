@@ -56,6 +56,7 @@ void XLex::Reset()
     dfa_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
         dfa_state_chart[i].resize(110);
+    nfa_col_value.clear();
     col_value.clear();
     min_state_chart.clear();
     min_state_chart.resize(110);
