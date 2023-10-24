@@ -31,9 +31,10 @@ bool Graph::insertEdge(int v1, int v2, char c)
 		}
 		// Ä¬ÈÏÊÇv1 -> v2
 		G[v1].insert(e2);
+		numEdges++;
 		return true;
 	}
-	numEdges++;
+	
 	return false;
 }
 
