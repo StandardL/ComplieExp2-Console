@@ -20,6 +20,7 @@ int main()
             cout << endl;
             e.toMinDFA();
             e.ShowMinDFA();
+            e.ShowCode("code.txt");
             e.Reset();
         }
     }

@@ -8,9 +8,16 @@ XLex::XLex()
     expression = "";
 
     o_priority = { {'(', 1}, {'|', 2}, {'^', 3}, {'*', 4}, {'?', 4} };
-    state_chart.resize(110);
+    nfa_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
-        state_chart[i].resize(110);
+        nfa_state_chart[i].resize(110);
+    dfa_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        dfa_state_chart[i].resize(110);
+    min_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+		min_state_chart[i].resize(110);
+    memset(isAccepted, 0, sizeof(isAccepted));
 }
 
 bool XLex::Read(std::string input)
@@ -41,11 +48,20 @@ void XLex::Reset()
     chars.clear();
     while (!st.empty())
         st.pop();
-    state_chart.clear();
-    state_chart.resize(110);
+    nfa_state_chart.clear();
+    nfa_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
-        state_chart[i].resize(110);
+        nfa_state_chart[i].resize(110);
+    dfa_state_chart.clear();
+    dfa_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        dfa_state_chart[i].resize(110);
     col_value.clear();
+    min_state_chart.clear();
+    min_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        min_state_chart[i].resize(110);
+    memset(isAccepted, 0, sizeof(isAccepted));
 }
 
 bool XLex::toDFA()
@@ -60,13 +76,13 @@ bool XLex::toDFA()
     DFA.insertVertix();  // DFA图中插入初始节点
     state_set.emplace(si, DFA_nodenum);
     DFA_nodenum++;  //放进去后记得自增节点编号
-    state_chart[state_set[si]][0] = si;  // 状态表的第一列存放状态集合
+    dfa_state_chart[state_set[si]][0] = si;  // 状态表的第一列存放状态集合
     q.push(si);  // 待处理的节点队列
 
     while (!q.empty())
     {
         auto sc = q.front(); q.pop();
-        state_chart[state_set[sc]][0] = sc;
+        dfa_state_chart[state_set[sc]][0] = sc;
         int state_index = 1;
         for (auto& c : chars)  // 构建列索引
         {
@@ -79,7 +95,7 @@ bool XLex::toDFA()
             }
             if (next_state.empty())  // 当前经过字符"c"时，没有可达节点状态
             {
-                state_chart[state_set[sc]][state_index] = next_state;
+                dfa_state_chart[state_set[sc]][state_index] = next_state;
                 state_index++;
                 continue;
             }
@@ -87,7 +103,7 @@ bool XLex::toDFA()
             {
                 e_closure(nitc, next_state);
             }
-            state_chart[state_set[sc]][state_index] = next_state;
+            dfa_state_chart[state_set[sc]][state_index] = next_state;
             state_index++;
 
             if (sc == next_state)  // 独立处理闭包情况，避免死循环
@@ -140,6 +156,27 @@ bool XLex::toNFA()
     st.emplace(e);
     nfa_start_node = s;
     nfa_end_node = e;
+
+    // 生成NFA状态转换表
+    // 第一列是节点编号(用下标存），第二列开始是节点对应的字符
+    // 第一行的是转换字符，用map存放
+    int index = 0;
+    for (auto& c : chars)
+    {
+        nfa_col_value[c] = index;
+        index++;
+    }
+    // 根据NFA的边生成状态转换表
+    for (int i = 0; i < NFA.NumofVertixes(); i++)
+    {
+        for (auto& e : NFA.G[i])
+        {
+			if (e.character != 'e')
+				nfa_state_chart[i][nfa_col_value[e.character]].emplace(e.end);
+            if (e.character == 'e')
+                nfa_state_chart[i][chars.size()].emplace(e.end);
+		}
+	}
     return true;
 }
 
@@ -148,7 +185,7 @@ bool XLex::toMinDFA()
     vector<int> S1, S2;  // DFA节点集合，S1终态集合，S2非终态集合
     for (int i = 0; i < DFA.NumofVertixes(); i++)
     {
-        if (state_chart[i][0].count(nfa_end_node) != 0)
+        if (dfa_state_chart[i][0].count(nfa_end_node) != 0)
             S1.emplace_back(i);
         else
 			S2.emplace_back(i);
@@ -174,8 +211,7 @@ bool XLex::toMinDFA()
 
         if (s.empty())
             continue;
-        int size = s.size();
-        if (size == 1)  // 只有一个节点，直接放入最小化DFA中
+        if (s.size() == 1)  // 只有一个节点，直接放入最小化DFA中
         {
 			mp[minDFA_nodenum++] = s;
 			continue;
@@ -185,10 +221,10 @@ bool XLex::toMinDFA()
 
         int node = s[0];
         bool is_same = true;  // 检查当前集合是否和目前已有的集合相同
-        for (int i = 1; i < size; i++)
+        for (int i = 1; i < s.size(); i++)
         {
             // 如果当前节点的转换表是否和已有的节点转换表不一致，说明需要继续划分
-            if (!is_equal(node, s[i], mp_temp))
+            if (!is_equal(s[i], node))
             {
 				is_same = false;
                 int cur_node = s[i];
@@ -196,16 +232,15 @@ bool XLex::toMinDFA()
                 for (auto it = s.begin()+1; it != s.end();)
                 {
                     // 在划分子集过程中确保是相同集合的元素被放在一起
-                    if (is_equal(*it, cur_node, mp_temp))
+                    if (is_equal(*it, cur_node))
                     {
                         cur_set.emplace_back(*it);
-                        s.erase(it);
+                        it = s.erase(it);
                     }
                     else
                         it++;
                 }
                 sub_set.emplace_back(cur_set);
-                size = s.size();
 			}
         }
         if (is_same)  // 如果相同，直接放入最小化DFA中
@@ -215,10 +250,15 @@ bool XLex::toMinDFA()
         else // 否则，把划分剩余的子集s加入到待处理队列
         {
             sub_set.emplace_back(s);
-            for (auto& it : sub_set)
+            /*for (int it = 0; it < sub_set.size(); it++)
             {
-				q.emplace(it);
-                mp_temp[minDFA_nodenum_temp++] = it;
+				q.emplace(sub_set[it]);
+                mp_temp[minDFA_nodenum_temp++] = sub_set[it];
+            }*/
+            for (auto i : sub_set)
+            {
+                q.emplace(i);
+                mp_temp[minDFA_nodenum_temp++] = i;
             }
             vector<int> temp;
             mp_temp[processing] = temp;
@@ -251,7 +291,6 @@ bool XLex::toMinDFA()
                     if (target != mp[k].end())
                     {
 						bool res = minDFA.insertEdge(i, k, e.character);
-                        cout << "Insert Result: " << res << endl;
 						break;
 					}
 				}
@@ -267,6 +306,38 @@ bool XLex::toMinDFA()
         }
 	}
 
+    // 记录最小化DFA的状态转换表
+    for (int i = 0; i < minDFA_t.NumofVertixes(); i++)
+    {
+        if (mp[abs(i - minDFA_t.NumofVertixes() + 1)].size() != 1)
+        {
+            set<int> s;
+            for (auto& it : mp[abs(i - minDFA_t.NumofVertixes() + 1)])
+            {
+                for (auto& state : dfa_state_chart[it][0])
+                    s.emplace(state);
+                min_state_chart[i][0] = s;
+            }
+            for (int j = 1; j <= chars.size(); j++)
+                min_state_chart[i][j] = dfa_state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
+        }
+        else
+        {
+            for (int j = 0; j <= chars.size(); j++)
+				min_state_chart[i][j] = dfa_state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
+        }
+        // 记录接受状态，并找到最小化DFA的开始节点
+        for (int i = 0; i < minDFA_t.NumofVertixes(); i++)
+        {
+            if (min_state_chart[i][0].count(nfa_end_node) != 0)
+            {
+				isAccepted[i] = true;
+                continue;
+            }
+            if (min_state_chart[i][0].count(nfa_start_node) != 0)
+                mindfa_start_node = i;
+        }
+    }
     return true;
 }
 
@@ -407,41 +478,94 @@ void XLex::e_closure(int v, set<int>& ei)
     }
 }
 
-int XLex::dfa_transform(int v, char c, map<int, vector<int>> mp)
+bool XLex::is_equal(int v1, int v2)
 {
-    int node = -114514;
-    for (auto& e : DFA.G[v])  // 回到DFA图中找这个编号的节点是否有c这条边
+    for (int i = 1; i <= chars.size(); i++)
     {
-        if (e.character == c)
-        {
-			node = e.end;
-			break;
-		}
-	}
-    if (node == -114514) // 找不到就附一个他本身的值
-        node = v;
-    int target;
-    for (auto& i : mp)  // 在映射表中找到这个节点的映射值编号
-    {
-        for (auto& j : i.second)
-        {
-            if (j == node)
-                target = i.first;
-        }
-    }
-    return target;
-}
-
-bool XLex::is_equal(int v1, int v2, map<int, vector<int>> mp)
-{
-    for (auto& c : chars)
-    {
-        /*if (dfa_transform(v1, c, mp) != dfa_transform(v2, c, mp))
-			return false;*/
-        if (state_chart[v1][c].count(nfa_end_node) != state_chart[v2][c].count(nfa_end_node))
-			return false;
+        if (dfa_state_chart[v1][i].count(nfa_end_node) != dfa_state_chart[v2][i].count(nfa_end_node))
+            return false;
     }
     return true;
+}
+
+void XLex::toCode(int v, int level)
+{
+    if (level > minDFA_t.NumofEdges())
+        return;
+    string t;
+    for (int l = 0; l < level; l++)  // 增加缩进符
+        t.append("\t");
+
+    if (isAccepted[v] == true)  // 如果当前节点是接受状态
+        code.emplace_back(t + "Accept();");
+
+    // * -> while，其余用if. 特别的，有指向自己的边说明就是*
+    vector<char> while_statement, if_statement;
+    for (auto& e : minDFA_t.G[v])
+    {
+		if (e.end == v)
+			while_statement.emplace_back(e.character);
+		else
+			if_statement.emplace_back(e.character);
+	}
+
+    // 初始化语句
+    code.emplace_back(t + "char CHAR = Input();");
+
+    if (!while_statement.empty())  // 处理while语句
+    {
+        string line = "while(";
+        int i = 0;
+        string str;
+        while (i < while_statement.size() - 1)
+        {
+			line.append("CHAR == ");
+			str.append(1, while_statement[i]);
+			str.append("||");
+            line.append(str);
+			i++;
+		}
+        str.clear();
+        str.append(1, while_statement[i]);
+        line.append("CHAR == "); line.append(str); line.append(")");
+        code.emplace_back(t + line);
+        code.emplace_back(t + "{");
+
+        if (isAccepted[v] == true)
+			code.emplace_back(t + "\tAccept();");
+		code.emplace_back(t + "\tCHAR = Input();");
+		code.emplace_back(t + "}");
+
+        if (if_statement.empty())
+            code.emplace_back(t + "Error();");
+    }
+
+    if (!if_statement.empty())  // 处理if语句
+    {
+        if (!minDFA_t.G[v].empty())
+        {
+            for (auto& e : minDFA_t.G[v])
+            {
+                if (e.end != v)
+                {
+                    
+                    string line = t + "if(CHAR == ";
+                    line.append(1, e.character);
+                    line.append(")");
+                    code.emplace_back(line);
+                    code.emplace_back(t + "{");
+                    
+                    toCode(e.end, level + 1);
+                    code.emplace_back(t + "}");
+                    code.emplace_back(t + "else");
+                }
+            }
+            string str;
+            str.append(1, '0' + v);
+            string line2 = "Error(" + str + ");";
+            code.emplace_back(t + "\t" + line2);
+        }
+    }
 }
 
 void XLex::toSuffix()
@@ -514,6 +638,23 @@ void XLex::ShowNFA()
     cout << "Start node is " << nfa_start_node << endl;
     cout << "End node is " << nfa_end_node << endl;
     cout << "-----------------NFA---------------------\n";
+    cout << endl;
+    cout << "--------------State Chart----------------\n";
+    for (int i = 0; i < NFA.NumofVertixes(); i++)
+    {
+        cout << "State " << i << ":\t";
+        for (int j = 0; j < nfa_state_chart[i].size(); j++)
+        {
+            for (auto& e : nfa_state_chart[i][j])
+            {
+				cout << e << ",";
+			}
+            cout << "\b ";
+			cout << "\t";
+		}
+		cout << endl;
+	}
+    cout << "--------------State Chart----------------\n";
 }
 
 void XLex::ShowDFA()
@@ -532,14 +673,14 @@ void XLex::ShowDFA()
     cout << "--------------State Chart----------------\n";
     for (int i = 0; i < DFA.NumofVertixes(); i++)
     {
-        for (auto& e : state_chart[i][0])
+        for (auto& e : dfa_state_chart[i][0])
         {
             cout << e << ",";
         }
         cout << "\t\t";
-        for (int j = 1; j < state_chart[i].size(); j++)
+        for (int j = 1; j < dfa_state_chart[i].size(); j++)
         {
-            for (auto& e : state_chart[i][j])
+            for (auto& e : dfa_state_chart[i][j])
             {
                 cout << e << ",";
             }
@@ -563,6 +704,16 @@ void XLex::ShowMinDFA()
     //cout << "Start node is 0" << endl;
     
 	cout << "-----------------MinDFA---------------------\n";
+}
+
+void XLex::ShowCode(string filename)
+{
+    toCode(mindfa_start_node, 0);
+	ofstream out(filename, ios_base::app);
+	for (auto& line : code)
+		out << line << endl;
+    out << endl;
+	out.close();
 }
 
 bool XLex::isOperator(char c)
