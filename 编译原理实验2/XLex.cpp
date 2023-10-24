@@ -8,9 +8,12 @@ XLex::XLex()
     expression = "";
 
     o_priority = { {'(', 1}, {'|', 2}, {'^', 3}, {'*', 4}, {'?', 4} };
-    state_chart.resize(110);
+    nfa_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
-        state_chart[i].resize(110);
+        nfa_state_chart[i].resize(110);
+    dfa_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        dfa_state_chart[i].resize(110);
     min_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
 		min_state_chart[i].resize(110);
@@ -45,10 +48,14 @@ void XLex::Reset()
     chars.clear();
     while (!st.empty())
         st.pop();
-    state_chart.clear();
-    state_chart.resize(110);
+    nfa_state_chart.clear();
+    nfa_state_chart.resize(110);
     for (int i = 0; i < 110; i++)
-        state_chart[i].resize(110);
+        nfa_state_chart[i].resize(110);
+    dfa_state_chart.clear();
+    dfa_state_chart.resize(110);
+    for (int i = 0; i < 110; i++)
+        dfa_state_chart[i].resize(110);
     col_value.clear();
     min_state_chart.clear();
     min_state_chart.resize(110);
@@ -69,13 +76,13 @@ bool XLex::toDFA()
     DFA.insertVertix();  // DFA图中插入初始节点
     state_set.emplace(si, DFA_nodenum);
     DFA_nodenum++;  //放进去后记得自增节点编号
-    state_chart[state_set[si]][0] = si;  // 状态表的第一列存放状态集合
+    dfa_state_chart[state_set[si]][0] = si;  // 状态表的第一列存放状态集合
     q.push(si);  // 待处理的节点队列
 
     while (!q.empty())
     {
         auto sc = q.front(); q.pop();
-        state_chart[state_set[sc]][0] = sc;
+        dfa_state_chart[state_set[sc]][0] = sc;
         int state_index = 1;
         for (auto& c : chars)  // 构建列索引
         {
@@ -88,7 +95,7 @@ bool XLex::toDFA()
             }
             if (next_state.empty())  // 当前经过字符"c"时，没有可达节点状态
             {
-                state_chart[state_set[sc]][state_index] = next_state;
+                dfa_state_chart[state_set[sc]][state_index] = next_state;
                 state_index++;
                 continue;
             }
@@ -96,7 +103,7 @@ bool XLex::toDFA()
             {
                 e_closure(nitc, next_state);
             }
-            state_chart[state_set[sc]][state_index] = next_state;
+            dfa_state_chart[state_set[sc]][state_index] = next_state;
             state_index++;
 
             if (sc == next_state)  // 独立处理闭包情况，避免死循环
@@ -149,6 +156,27 @@ bool XLex::toNFA()
     st.emplace(e);
     nfa_start_node = s;
     nfa_end_node = e;
+
+    // 生成NFA状态转换表
+    // 第一列是节点编号(用下标存），第二列开始是节点对应的字符
+    // 第一行的是转换字符，用map存放
+    int index = 0;
+    for (auto& c : chars)
+    {
+        nfa_col_value[c] = index;
+        index++;
+    }
+    // 根据NFA的边生成状态转换表
+    for (int i = 0; i < NFA.NumofVertixes(); i++)
+    {
+        for (auto& e : NFA.G[i])
+        {
+			if (e.character != 'e')
+				nfa_state_chart[i][nfa_col_value[e.character]].emplace(e.end);
+            if (e.character == 'e')
+                nfa_state_chart[i][chars.size()].emplace(e.end);
+		}
+	}
     return true;
 }
 
@@ -157,7 +185,7 @@ bool XLex::toMinDFA()
     vector<int> S1, S2;  // DFA节点集合，S1终态集合，S2非终态集合
     for (int i = 0; i < DFA.NumofVertixes(); i++)
     {
-        if (state_chart[i][0].count(nfa_end_node) != 0)
+        if (dfa_state_chart[i][0].count(nfa_end_node) != 0)
             S1.emplace_back(i);
         else
 			S2.emplace_back(i);
@@ -286,17 +314,17 @@ bool XLex::toMinDFA()
             set<int> s;
             for (auto& it : mp[abs(i - minDFA_t.NumofVertixes() + 1)])
             {
-                for (auto& state : state_chart[it][0])
+                for (auto& state : dfa_state_chart[it][0])
                     s.emplace(state);
                 min_state_chart[i][0] = s;
             }
             for (int j = 1; j <= chars.size(); j++)
-                min_state_chart[i][j] = state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
+                min_state_chart[i][j] = dfa_state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
         }
         else
         {
             for (int j = 0; j <= chars.size(); j++)
-				min_state_chart[i][j] = state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
+				min_state_chart[i][j] = dfa_state_chart[*mp[abs(i - minDFA_t.NumofVertixes() + 1)].begin()][j];
         }
         // 记录接受状态，并找到最小化DFA的开始节点
         for (int i = 0; i < minDFA_t.NumofVertixes(); i++)
@@ -454,7 +482,7 @@ bool XLex::is_equal(int v1, int v2)
 {
     for (int i = 1; i <= chars.size(); i++)
     {
-        if (state_chart[v1][i].count(nfa_end_node) != state_chart[v2][i].count(nfa_end_node))
+        if (dfa_state_chart[v1][i].count(nfa_end_node) != dfa_state_chart[v2][i].count(nfa_end_node))
             return false;
     }
     return true;
@@ -462,6 +490,8 @@ bool XLex::is_equal(int v1, int v2)
 
 void XLex::toCode(int v, int level)
 {
+    if (level > minDFA_t.NumofEdges())
+        return;
     string t;
     for (int l = 0; l < level; l++)  // 增加缩进符
         t.append("\t");
@@ -500,8 +530,7 @@ void XLex::toCode(int v, int level)
         line.append("CHAR == "); line.append(str); line.append(")");
         code.emplace_back(t + line);
         code.emplace_back(t + "{");
-        for (int l = 0; l < level; l++)  // 增加缩进符
-            code.emplace_back(t + "\t");
+
         if (isAccepted[v] == true)
 			code.emplace_back(t + "\tAccept();");
 		code.emplace_back(t + "\tCHAR = Input();");
@@ -609,6 +638,23 @@ void XLex::ShowNFA()
     cout << "Start node is " << nfa_start_node << endl;
     cout << "End node is " << nfa_end_node << endl;
     cout << "-----------------NFA---------------------\n";
+    cout << endl;
+    cout << "--------------State Chart----------------\n";
+    for (int i = 0; i < NFA.NumofVertixes(); i++)
+    {
+        cout << "State " << i << ":\t";
+        for (int j = 0; j < nfa_state_chart[i].size(); j++)
+        {
+            for (auto& e : nfa_state_chart[i][j])
+            {
+				cout << e << ",";
+			}
+            cout << "\b ";
+			cout << "\t";
+		}
+		cout << endl;
+	}
+    cout << "--------------State Chart----------------\n";
 }
 
 void XLex::ShowDFA()
@@ -627,14 +673,14 @@ void XLex::ShowDFA()
     cout << "--------------State Chart----------------\n";
     for (int i = 0; i < DFA.NumofVertixes(); i++)
     {
-        for (auto& e : state_chart[i][0])
+        for (auto& e : dfa_state_chart[i][0])
         {
             cout << e << ",";
         }
         cout << "\t\t";
-        for (int j = 1; j < state_chart[i].size(); j++)
+        for (int j = 1; j < dfa_state_chart[i].size(); j++)
         {
-            for (auto& e : state_chart[i][j])
+            for (auto& e : dfa_state_chart[i][j])
             {
                 cout << e << ",";
             }

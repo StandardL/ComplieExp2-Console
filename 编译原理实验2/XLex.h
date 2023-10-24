@@ -40,8 +40,10 @@ private:
 	std::map<char, int> o_priority;  // 运算符的优先级
 	std::stack<int> st;  // 存放节点编号的栈
 	std::set<char> chars;  // 字符节点
-	std::vector<std::vector<std::set<int>>> state_chart;  // DFA存放状态表的vector
 	std::map<char, int> col_value;  // 状态转换表的列索引，e.g. a->1.
+	std::map<char, int> nfa_col_value;  // NFA状态转换表的列索引
+	std::vector<std::vector<std::set<int>>> nfa_state_chart;  // NFA存放状态表的vector
+	std::vector<std::vector<std::set<int>>> dfa_state_chart;  // DFA存放状态表的vector
 	std::vector<std::vector<std::set<int>>> min_state_chart;  // 最小化DFA存放状态表的vector
 	bool isAccepted[110];  // 是否是接受状态
 
