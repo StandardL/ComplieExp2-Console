@@ -72,7 +72,7 @@ bool XLex::toDFA()
     
     set<int> si; si.clear();
     si.emplace(nfa_start_node);  // 放入初始节点
-    e_closure(nfa_start_node, si);  // 求其e-闭包
+    e_closure(nfa_start_node, si, 0);  // 求其e-闭包
     int DFA_nodenum = 0;  // DFA节点编号
     DFA.insertVertix();  // DFA图中插入初始节点
     state_set.emplace(si, DFA_nodenum);
@@ -102,7 +102,7 @@ bool XLex::toDFA()
             }
             for (auto& nitc : next_state)  // 若有，对其求取e-闭包
             {
-                e_closure(nitc, next_state);
+                e_closure(nitc, next_state, 0);
             }
             dfa_state_chart[state_set[sc]][state_index] = next_state;
             state_index++;
@@ -466,15 +466,17 @@ void XLex::getNeighbor(int v, char c, set<int>& ni)  // 获取经过c之后的可达状态
     }
 }
 
-void XLex::e_closure(int v, set<int>& ei)
+void XLex::e_closure(int v, set<int>& ei, int level)
 {
+    if (level > NFA.NumofEdges())
+		return;
     auto target = NFA.G[v];
     for (auto& e : target)
     {
         if (e.character == 'e')
         {
             ei.insert(e.end);
-            e_closure(e.end, ei);
+            e_closure(e.end, ei, level + 1);
         }
     }
 }

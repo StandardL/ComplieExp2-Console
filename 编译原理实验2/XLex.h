@@ -60,7 +60,7 @@ private:
 
 	// NFA -> DFA
 	void getNeighbor(int v, char c, std::set<int>& ni);  // 找当前节点相邻的标记为c的节点
-	void e_closure(int v, std::set<int>& ei);  // 找出所有epsilon闭包
+	void e_closure(int v, std::set<int>& ei, int level);  // 找出所有epsilon闭包
 
 	// DFA -> MinDFA
 	bool is_equal(int v1, int v2);
